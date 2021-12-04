@@ -12,7 +12,8 @@ but is close enough. Also, imported `ACK number` and `sequence number` to handle
 
 
 ## Install and Run
-
+- two ways of using this program
+1. By terminal run python scripts
 * **Note:  tested on macos platform
 
 First, open ....., and input the operations in terminal
@@ -31,6 +32,8 @@ Some explanations for args:
   - `ip_address_for_acks`, `port_for_acks`:  writes it to the file and sends ACKs to.
 - server options arguments:
     - ` ack_port_number`:  used to receive acknowledgements.
+
+2. run the `start.sh` file
 
 ## project structure
 
