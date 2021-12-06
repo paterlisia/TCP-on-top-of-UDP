@@ -2,4 +2,6 @@ some requirement packets or libraries here for dependencies
 
 1. newudpl installation
     please refer to http://www.cs.columbia.edu/~hgs/research/projects/newudpl/newudpl-1.4/newudpl.html
+    follow the instructions in `install`
+    option: make alias of newudpl
 2. python 3.+
