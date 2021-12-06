@@ -1,1 +1,5 @@
 some requirement packets or libraries here for dependencies
+
+1. newudpl installation
+    please refer to http://www.cs.columbia.edu/~hgs/research/projects/newudpl/newudpl-1.4/newudpl.html
+2. python 3.+
