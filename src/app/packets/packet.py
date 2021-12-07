@@ -18,13 +18,13 @@ def calculate_checksum(seq_num, ack_num, fin_flag, data_bytes):
     # Handle the case where the length is odd
     if (data_len & 1):
         data_len -= 1
-        sum = ord(data_bytes[data_len])
+        sum = data_bytes[data_len]
     else:
         sum = 0
     # Iterate through chars two by two and sum their byte values
     while data_len > 0:
         data_len -= 2
-        sum += (ord(data_bytes[data_len + 1]) << 8) + ord(data_bytes[data_len])
+        sum += (data_bytes[data_len + 1]) << 8 + data_bytes[data_len]
     # Wrap overflow around
     sum = (sum >> 16) + (sum & 0xffff)
     result = (~ sum) & 0xffff  # One's complement
@@ -46,7 +46,7 @@ class Packet(object):
         self.urg_ptr  = 0
 
 class UnackedPacket(Packet):
-    def __init__(self, ack_num=None, time_stamp=None):
+    def __init__(self, ack_num=0, time_stamp=None):
         self.ack_num    = ack_num
         self.begin_time = time_stamp
 
@@ -74,14 +74,13 @@ class PacketExtractor(Packet):
     def get_checksum(self, header_params):
         return header_params[CHECKSUM_POS]
 
-    def is_checksum_valid(self, packet):
+    def is_checksum_valid(self, packet, recv_checksum):
         header_params = self.get_header_params_from_packet(packet)
         data_bytes    = self.get_data_from_packet(packet)
         seq_num  = self.get_seq_num(header_params)
         ack_num  = self.get_ack_num(header_params)
         fin_flag = self.get_fin_flag(header_params)
-        header_checksum = self.get_checksum(header_params)
-        return calculate_checksum(seq_num, ack_num, fin_flag, data_bytes) == header_checksum
+        return calculate_checksum(seq_num, ack_num, fin_flag, data_bytes) == recv_checksum
 
 
 class PacketGenerator(Packet):
@@ -108,6 +107,6 @@ class PacketGenerator(Packet):
                                 )
         return tcp_header
 
-    def generate_packet(self, seq_num, ack_num, fin_flag, user_data=""):
+    def generate_packet(self, seq_num, ack_num, fin_flag, user_data="".encode()):
         return self.generate_tcp_header(seq_num, ack_num, fin_flag, user_data)\
                + user_data
