@@ -29,7 +29,6 @@ class TcpServer(object):
         self.connections = [self.recv_sock]
         self.recv_ip = recv_ip
         self.recv_port = recv_port
-        self.window_size = 1
         self.file_size = 0
         self.send_addr = (send_ip, int(send_port))
         self.file_write = open(filename, "w")
@@ -105,16 +104,12 @@ class TcpServer(object):
                 else:
                     if "start file tranfer".encode() in recvd_pkt:
                         send_packet = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
-                        msg, self.window_size, self.file_size =            \
+                        msg, window_size, self.file_size =            \
                                                     send_packet.split(':')
-                        self.window_size = int(self.window_size)
                         self.file_size   = int(self.file_size)
-                        self.logger.debug("window_size: %s" % self.window_size)
                         self.logger.debug("file_size: %s" % self.file_size)
-                        # self.send_addr   = recvd_addr
                         seq_num  = self.ack_num_from
                         ack_num  = self.seq_num_from + RECV_BUFFER  # seq number of next byte expected from the client
-                        # self.expected_seq += RECV_BUFFER
                         print("acks", self.seq_num_from)
                         fin_flag = 0
                         packet = self.pkt_gen                      \
