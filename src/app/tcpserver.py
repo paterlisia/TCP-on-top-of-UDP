@@ -12,6 +12,7 @@ from utils.utils import init_recv_socket, progress_bar
 from error.error import recv_arg_parser
 
 # make packets utils
+from helper.helper import ProcessPacket
 from packets.packet import RECV_BUFFER, HEADER_LENGTH
 from packets.packet import PacketGenerator, PacketExtractor
 
@@ -31,6 +32,8 @@ class TcpServer(object):
         self.file_size = 0
         self.send_addr = (send_ip, int(send_port))
         self.file_write = open(filename, "w")
+        # helper object
+        self.helper = ProcessPacket(recv_port, send_port)
         # acks, seq, timer
         self.seq_num_to = 0
         self.seq_num_from = 0
@@ -86,17 +89,7 @@ class TcpServer(object):
             try:
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(RECV_BUFFER + HEADER_LENGTH)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
-                # extract params from packet
-                header_params = self.pkt_ext                       \
-                                    .get_header_params_from_packet \
-                                                    (recvd_pkt)
-                self.seq_num_from  = self.pkt_ext                       \
-                                    .get_seq_num(header_params)
-                self.ack_num_from  = self.pkt_ext                       \
-                                    .get_ack_num(header_params)
-                recv_fin_flag = self.pkt_ext                       \
-                                    .get_fin_flag(header_params)
-                recv_checksum = self.pkt_ext.get_checksum(header_params)
+                header_params, self.seq_num_from, self.ack_num_from, recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("header params", header_params)
                 print("recv packet with seq %s with ack %s"%(self.seq_num_from, self.ack_num_from))
                 log =   str(datetime.datetime.now()) + " " +       \

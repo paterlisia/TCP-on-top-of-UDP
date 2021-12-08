@@ -1,7 +1,6 @@
 import datetime
 import logging
 import os
-import select
 import socket
 import sys
 import time
@@ -16,6 +15,7 @@ from utils.utils import init_send_socket
 from error.error import send_arg_parser
 
 # packets
+from helper.helper import ProcessPacket
 from packets.packet import RECV_BUFFER, calculate_checksum
 from packets.packet import PacketGenerator, PacketExtractor, UnackedPacket
 
@@ -51,6 +51,8 @@ class TcpClient(object):
         # client status, file trans finish flag
         self.status      = None
         self.recv_fin_flag = False
+        # helper object
+        self.helper = ProcessPacket(recv_port, send_port)
         self.pkt_gen     = PacketGenerator(send_port, recv_port)
         self.pkt_ext     = PacketExtractor(send_port, recv_port)
         self.segment_count  = 0
@@ -163,15 +165,9 @@ class TcpClient(object):
         while self.status:
             try:
                 #----------receive data from client--------------------------
-                recv_packet, recv_addr = self.tcp_client_sock.recvfrom(RECV_BUFFER)
-                print("client recv on %s with packet %s "% (self.recv_addr, recv_packet))
-                header_params = self.pkt_ext.get_header_params_from_packet(recv_packet)
-                self.seq_num_from  = self.pkt_ext                       \
-                                    .get_seq_num(header_params)
-                self.ack_num_from  = self.pkt_ext                       \
-                                    .get_ack_num(header_params)
-                self.recv_fin_flag = self.pkt_ext                       \
-                                    .get_fin_flag(header_params)
+                recvd_pkt, recv_addr = self.tcp_client_sock.recvfrom(RECV_BUFFER)
+                print("client recv on %s with packet %s "% (self.recv_addr, recvd_pkt))
+                header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("packet header", header_params)
                 log = str(datetime.datetime.now()) + " " +         \
                     str(self.recv_addr[1]) + " " +               \
