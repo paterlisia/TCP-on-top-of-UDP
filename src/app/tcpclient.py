@@ -84,8 +84,7 @@ class TcpClient(object):
         a = self.tcp_client_sock.sendto(packet, self.recv_addr)
     def retransmit_file_response(self):
         self.logger.debug("retransmit!!!")
-        print                                                  \
-        ("oldest_unacked_pkt: %s" % self.oldest_unacked_pkt.ack_num)
+        print ("oldest_unacked_pkt: %s" % self.oldest_unacked_pkt.ack_num)
         if self.oldest_unacked_pkt.ack_num != 0:
             initial_seq =  self.oldest_unacked_pkt.ack_num - self.window_size * RECV_BUFFER
             print("initial", initial_seq)
@@ -124,7 +123,6 @@ class TcpClient(object):
         self.start_tcp_client()
         print ("start TcpClient on %s with port %s ..."% self.send_addr)
         print ("start TcpClient on %s with port %s ..."% self.recv_addr)
-        recv_ack = True # start to receive packets from server
         recv_fin_flag = False
         while self.status:
             try:

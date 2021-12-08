@@ -61,7 +61,6 @@ class TcpServer(object):
         self.logger.debug("write file from %s byte" % start_bytes)
         self.logger.debug("data_len: %s" % len(data_bytes))
         self.file_write.seek(start_bytes)
-        print("write data: ", data_bytes)
         self.file_write.write(data_bytes)
     def is_write_file_completed(self):
         return os.path.getsize(self.file_write.name) == self.file_size
@@ -79,7 +78,7 @@ class TcpServer(object):
         while self.status:
             try:
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(RECV_BUFFER + HEADER_LENGTH)
-                print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
+                # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
                 header_params = self.pkt_ext                       \
                                     .get_header_params_from_packet \
@@ -112,7 +111,7 @@ class TcpServer(object):
                         self.file_size   = int(self.file_size)
                         self.logger.debug("window_size: %s" % self.window_size)
                         self.logger.debug("file_size: %s" % self.file_size)
-                        self.send_addr   = recvd_addr
+                        # self.send_addr   = recvd_addr
                         seq_num  = self.ack_num_from
                         ack_num  = self.seq_num_from + RECV_BUFFER  # seq number of next byte expected from the client
                         # self.expected_seq += RECV_BUFFER
