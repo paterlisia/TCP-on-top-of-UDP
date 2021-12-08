@@ -82,6 +82,7 @@ class TcpClient(object):
         packet = self.pkt_gen.generate_packet(*pkt_params)
         self.logger.debug("checksum: %s" % calculate_checksum(*pkt_params))
         a = self.tcp_client_sock.sendto(packet, self.recv_addr)
+        self.send_time = time.time()
     def retransmit_file_response(self):
         self.logger.debug("retransmit!!!")
         print ("oldest_unacked_pkt: %s" % self.oldest_unacked_pkt.ack_num)
@@ -109,6 +110,13 @@ class TcpClient(object):
         if self.oldest_unacked_pkt.begin_time is None:
             return False
         return time.time() - self.oldest_unacked_pkt.begin_time >= self.estimated_rtt
+    # handle timeout situation: retransmission
+    def timer(self):
+        print("start timer thread")
+        while True:
+            if self.is_oldest_unacked_pkt_timeout():
+                print("Warnig: timeout, retransmit packet: ", self.seq_num_to)
+                self.retransmit_file_response()
 
     def send_init_packet(self):
         packet = self.pkt_gen.generate_packet(self.seq_num_to, self.ack_num_to, 0, \
@@ -118,6 +126,8 @@ class TcpClient(object):
                                                     (packet)
         print(header_params)
         self.tcp_client_sock.sendto(packet, self.recv_addr)
+        self.oldest_unacked_pkt.begin_time = time.time()
+        self.send_time = time.time()
     # method to send packet
     def tcp_send_pkt(self):
         self.start_tcp_client()
@@ -126,11 +136,6 @@ class TcpClient(object):
         recv_fin_flag = False
         while self.status:
             try:
-                # handle timeout situation: retransmission
-                if self.is_oldest_unacked_pkt_timeout():
-                    print("Warnig: timeout, retransmit packet: ", self.seq_num_to)
-                    self.retransmit_file_response()
-                # self.seq_num_to += RECV_BUFFER
                 recv_packet, recv_addr = self.tcp_client_sock.recvfrom(RECV_BUFFER)
                 print("client recv on %s with packet %s "% (self.recv_addr, recv_packet))
                 header_params = self.pkt_ext.get_header_params_from_packet(recv_packet)
@@ -181,7 +186,6 @@ class TcpClient(object):
                         self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
                         log += " " + str(self.estimated_rtt) + "\n"
                         self.log_file.write(log)
-                        time.sleep(1)
                         print("packet corrupted, retransmit packet")
                         self.retransmit_file_response()
                         self.logger.debug("expected_ack not correct !!!")
@@ -256,18 +260,18 @@ class TcpClient(object):
         self.tcp_send_pkt()
 if __name__ == "__main__":
     params = send_arg_parser(sys.argv)
-    tcp_client = TcpClient(**params)
-    tcp_client.run()
+    # tcp_client = TcpClient(**params)
+    # tcp_client.run()
     try:
         tcp_client = TcpClient(**params)
 
-        # ack_th = Thread(target=tcp_client.tcp_valid_acks)
-        # ack_th.setDaemon(True)
-        # ack_th.start()
-        # client_th = Thread(target=tcp_client.tcp_send_pkt)
+        client_th = Thread(target=tcp_client.tcp_send_pkt)
         # client_th.setDaemon(True)
-        # client_th.start()
+        client_th.start()
 
+        ack_th = Thread(target=tcp_client.timer)
+        # ack_th.setDaemon(True)
+        ack_th.start()
     except ThreadError as e:
         print ('Fail to open thread. Error: #{0}, {1}'.format(str(e[0]), e[1]))
         sys.exit('Thread Fail')
