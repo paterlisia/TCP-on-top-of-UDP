@@ -113,7 +113,7 @@ class TcpClient(object):
     # handle timeout situation: retransmission
     def timer(self):
         print("start timer thread")
-        while True:
+        while self.status:
             if self.is_oldest_unacked_pkt_timeout():
                 print("Warnig: timeout, retransmit packet: ", self.seq_num_to)
                 self.retransmit_file_response()
@@ -132,7 +132,6 @@ class TcpClient(object):
     def tcp_send_pkt(self):
         self.start_tcp_client()
         print ("start TcpClient on %s with port %s ..."% self.send_addr)
-        print ("start TcpClient on %s with port %s ..."% self.recv_addr)
         recv_fin_flag = False
         while self.status:
             try:
@@ -196,58 +195,6 @@ class TcpClient(object):
                 self.close_tcp_client()
         self.tcp_client_sock.close()
 
-    # method to handle acks
-    def tcp_valid_acks(self):
-        print ("start acks on %s with port %s ..."% self.send_addr)
-        self.start_tcp_client()
-        while self.status:
-            recv_packet, recv_addr = self.tcp_client_sock.recvfrom(RECV_BUFFER)
-            print("client recv: ",recv_packet)
-            header_params = self.pkt_ext.get_header_params_from_packet(recv_packet)
-            self.seq_num_from  = self.pkt_ext                       \
-                                .get_seq_num(header_params)
-            self.ack_num_from  = self.pkt_ext                       \
-                                .get_ack_num(header_params)
-            recv_fin_flag = self.pkt_ext                       \
-                                .get_fin_flag(header_params)
-            log = str(datetime.datetime.now()) + " " +         \
-                str(self.recv_addr[1]) + " " +               \
-                str(self.send_addr[1]) + " " +               \
-                str(self.seq_num_from) + " " +                    \
-                str(self.ack_num_from)
-            if recv_fin_flag:
-                log += " ACK FIN"
-                sample_rtt = time.time() - self.send_time
-                self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
-                log += " " + str(self.estimated_rtt) + "\n"
-                self.log_file.write(log)
-                print ("Delivery completed successfully")
-                self.print_transfer_stats()
-                self.close_tcp_client()
-            else:
-                log += " ACK"
-                if self.oldest_unacked_pkt.ack_num == self.seq_num_from:
-                    sample_rtt = time.time() - self.send_time
-                    self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
-                    log += " " + str(self.estimated_rtt) + "\n"
-                    self.log_file.write(log)
-                    seq_num  = self.ack_num_from    
-                    ack_num  = self.seq_num_from                    \
-                            + RECV_BUFFER * self.window_size
-                    fin_flag = ack_num >= self.file_size
-                    data_bytes = self.read_file_buffer(seq_num)
-                    self.send_file_response                    \
-                        (seq_num, ack_num, fin_flag, data_bytes)
-                    self.oldest_unacked_pkt.ack_num += RECV_BUFFER
-                    self.oldest_unacked_pkt.begin_time = time.time()
-                else:
-                    sample_rtt = time.time() - self.send_time
-                    self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
-                    log += " " + str(self.estimated_rtt) + "\n"
-                    self.log_file.write(log)
-                    self.logger.debug("expected_ack not correct !!!")
-                    self.logger.debug("oldest_unacked_pkt.num: %s" % self.oldest_unacked_pkt.ack_num)
-                    self.logger.debug("recv_seq_num: %s, ignore" % self.seq_num_from)
     def start_tcp_client(self):
         self.status = True
         self.send_init_packet()
@@ -260,17 +207,13 @@ class TcpClient(object):
         self.tcp_send_pkt()
 if __name__ == "__main__":
     params = send_arg_parser(sys.argv)
-    # tcp_client = TcpClient(**params)
-    # tcp_client.run()
     try:
         tcp_client = TcpClient(**params)
 
         client_th = Thread(target=tcp_client.tcp_send_pkt)
-        # client_th.setDaemon(True)
         client_th.start()
 
         ack_th = Thread(target=tcp_client.timer)
-        # ack_th.setDaemon(True)
         ack_th.start()
     except ThreadError as e:
         print ('Fail to open thread. Error: #{0}, {1}'.format(str(e[0]), e[1]))
