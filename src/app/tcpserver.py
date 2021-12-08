@@ -2,7 +2,6 @@
 import datetime
 import logging
 import os
-import select
 import socket
 import sys
 
@@ -52,17 +51,24 @@ class TcpServer(object):
         hd.setFormatter(formatter)
         self.logger.addHandler(hd)
 
+
     def send_close_request(self, seq_num, ack_num, fin_flag):
         self.logger.info("Sending Close Request...")
         packet = self.pkt_gen.generate_packet(seq_num, ack_num, fin_flag)
         self.recv_sock.sendto(packet, self.send_addr)
+
+
     def write_file_buffer(self, start_bytes, data_bytes):
         self.logger.debug("write file from %s byte" % start_bytes)
         self.logger.debug("data_len: %s" % len(data_bytes))
         self.file_write.seek(start_bytes)
         self.file_write.write(data_bytes)
+
+
     def is_write_file_completed(self):
         return os.path.getsize(self.file_write.name) == self.file_size
+
+
     # send ack for current packet
     def tcp_send_ack(self):
         fin_flag = 0
@@ -70,6 +76,8 @@ class TcpServer(object):
                     .generate_packet              \
                     (self.ack_num_from, self.seq_num_from, fin_flag)
         self.recv_sock.sendto(packet, self.send_addr)
+
+
     # tcp server 
     def tcp_recv_pkt(self):
         self.start_tcp_server()
@@ -152,7 +160,8 @@ class TcpServer(object):
                                         + RECV_BUFFER
                                 self.logger.debug("seq_num: %s" % seq_num)
                                 self.logger.debug("ack_num: %s" % ack_num)
-                                fin_flag = 0
+                                # flag means the file has been fully received
+                                fin_flag = ack_num >= self.file_size
                                 packet = self.pkt_gen                      \
                                             .generate_packet              \
                                             (seq_num, ack_num, fin_flag)
@@ -176,14 +185,22 @@ class TcpServer(object):
                  self.close_tcp_server()
                  os.remove(self.file_write.name)
         self.recv_sock.close()
+
+
     def start_tcp_server(self):
         self.status = True
+
+
     def close_tcp_server(self):
         self.file_write.close()
         self.log_file.close()
         self.status = False
+
+
     def run(self):
         self.tcp_recv_pkt()  
+
+
 if __name__ == "__main__":
    params = recv_arg_parser(sys.argv)
    tcp_server = TcpServer(**params)
