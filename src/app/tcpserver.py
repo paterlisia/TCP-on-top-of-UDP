@@ -41,6 +41,7 @@ class TcpServer(object):
         self.ack_num_from = 0
         self.ack_num_to = 0
         self.estimated_rtt = 0
+        self.recv_fin_flag = 0
         self.log_file = [sys.stdout, open(
             log_name, "w")][log_name != "stdout"]
         self.pkt_gen = PacketGenerator(recv_port, send_port)
@@ -93,7 +94,7 @@ class TcpServer(object):
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(RECV_BUFFER + HEADER_LENGTH)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
-                header_params, self.seq_num_from, self.ack_num_from, recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
+                header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("header params", header_params)
                 print("recv packet with seq %s with ack %s"%(self.seq_num_from, self.ack_num_from))
                 log =   str(datetime.datetime.now()) + " " +       \
@@ -119,7 +120,7 @@ class TcpServer(object):
                         fin_flag = 0
                         packet = self.pkt_gen                      \
                                         .generate_packet              \
-                                        (0, 0, fin_flag)
+                                        (0, 0, fin_flag, "got it".encode())
                         self.recv_sock.sendto(packet, self.send_addr)
                         print("send seq %s ack %s"%(seq_num, ack_num))
                     else:
@@ -130,15 +131,15 @@ class TcpServer(object):
                                             (self.seq_num_to, self.ack_num_to, 0)
                             self.recv_sock.sendto(packet, self.send_addr)
                             # packet inordered, retransmit
-                            recv_fin_flag = 0
-                        if recv_fin_flag:
+                            self.recv_fin_flag = 0
+                        if self.recv_fin_flag:
                             self.log_file.write(log + " FIN\n")
                             send_data = self.pkt_ext                       \
                                             .get_data_from_packet          \
                                                     (recvd_pkt)
                             self.write_file_buffer(self.seq_num_from, send_data.decode())
                             self.send_close_request                        \
-                                (self.seq_num_from, self.ack_num_from, recv_fin_flag)
+                                (self.seq_num_from, self.ack_num_from, self.recv_fin_flag)
                             self.close_tcp_server()
                             print ("Delivery completed successfully")
                         else:
@@ -156,12 +157,14 @@ class TcpServer(object):
                                 self.logger.debug("seq_num: %s" % seq_num)
                                 self.logger.debug("ack_num: %s" % ack_num)
                                 # flag means the file has been fully received
-                                fin_flag = ack_num >= self.file_size
+                                # fin_flag = ack_num >= self.file_size
                                 packet = self.pkt_gen                      \
                                             .generate_packet              \
-                                            (seq_num, ack_num, fin_flag)
+                                            (seq_num, ack_num, self.recv_fin_flag)
+                                # self.recv_fin_flag = fin_flag
                                 self.recv_sock.sendto(packet, self.send_addr)
                                 print("send seq %s ack %s"%(seq_num, ack_num))
+                                print("finsih, ", self.recv_fin_flag)
                                 self.ack_num_to = self.seq_num_from + RECV_BUFFER
                                 self.seq_num_to = self.ack_num_from
                                 self.expected_seq = ack_num
