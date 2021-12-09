@@ -128,7 +128,7 @@ class TcpServer(object):
                             self.recv_sock.sendto(packet, self.send_addr)
                             # packet inordered, retransmit
                             recv_fin_flag = 0
-                        if recv_fin_flag and self.is_write_file_completed():
+                        if recv_fin_flag:
                             self.log_file.write(log + " FIN\n")
                             send_data = self.pkt_ext                       \
                                             .get_data_from_packet          \
@@ -143,9 +143,7 @@ class TcpServer(object):
                             print("expected ack %s, ack received %s" %(self.expected_seq, self.seq_num_from))
                             if self.expected_seq == self.seq_num_from and       \
                             self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
-                                send_data = self.pkt_ext                   \
-                                                .get_data_from_packet      \
-                                                        (recvd_pkt).decode()
+                                send_data = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
                                 self.write_file_buffer                     \
                                     (self.seq_num_from, send_data)
                                 progress_bar(os.path.getsize(self.file_write.name), self.file_size)

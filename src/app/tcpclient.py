@@ -96,18 +96,25 @@ class TcpClient(object):
         if self.initial_packet.ack_num != 0:
             # initial_seq =  self.initial_packet.ack_num - self.window_size * RECV_BUFFER
             print("initial", self.base)
-            for i in range(self.window_size):
-                self.retransmit_counter()
-                seq_num = self.base + i * RECV_BUFFER
-                self.logger.debug("retransmit_seq_num: %s" % seq_num)
-                ack_num = seq_num + self.window_size * RECV_BUFFER
-                self.logger.debug("retransmit_ack_num: %s" % ack_num)
-                if i == 0:
-                    self.initial_packet.ack_num = ack_num
-                    self.initial_packet.begin_time = time.time()
-                data_bytes = self.read_file_buffer(seq_num)
-                fin_flag = len(data_bytes) == 0
-                self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
+            # for i in range(self.window_size):
+            #     self.retransmit_counter()
+            #     seq_num = self.base + i * RECV_BUFFER
+            #     self.logger.debug("retransmit_seq_num: %s" % seq_num)
+            #     ack_num = seq_num + self.window_size * RECV_BUFFER
+            #     self.logger.debug("retransmit_ack_num: %s" % ack_num)
+            #     if i == 0:
+            #         self.initial_packet.ack_num = ack_num
+            #         self.initial_packet.begin_time = time.time()
+            #     data_bytes = self.read_file_buffer(seq_num)
+            #     fin_flag = len(data_bytes) == 0
+            #     self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
+            self.retransmit_counter()
+            seq_num = self.ack_num_from
+            ack_num = self.seq_num_from + RECV_BUFFER
+            self.logger.debug("retransmit_seq_num: %s" % seq_num)
+            data_bytes = self.read_file_buffer(seq_num)
+            fin_flag = len(data_bytes) == 0
+            self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
         else :
             print("retransmit the start file info")
             self.send_init_packet()
@@ -174,6 +181,7 @@ class TcpClient(object):
                     print ("Delivery completed successfully")
                     self.print_transfer_stats()
                     self.close_tcp_client()
+                    self.send_pkt(self.ack_num_from, self.seq_num_from, self.recv_fin_flag, "".encode())
                 else:
                     log += " ACK"
                     print(self.initial_packet.ack_num, self.seq_num_from)
@@ -195,6 +203,7 @@ class TcpClient(object):
                         # update unACKed segment with smallest seq #
                         if self.base == self.seq_num_from:
                             self.base = self.buf[0]
+                            print("move window base to", self.base)
                             self.initial_packet.ack_num = ack_num
                             self.initial_packet.begin_time = time.time()
                     # received ACKs fall out of the window size range
