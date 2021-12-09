@@ -15,6 +15,7 @@ from error.error import recv_arg_parser
 from helper.helper import ProcessPacket
 from packets.packet import RECV_BUFFER, HEADER_LENGTH
 from packets.packet import PacketGenerator, PacketExtractor
+from helper.helper import ProcessPacket
 
 localhost = socket.gethostbyname(socket.gethostname())
 default_port = 8080
@@ -44,6 +45,8 @@ class TcpServer(object):
             log_name, "w")][log_name != "stdout"]
         self.pkt_gen = PacketGenerator(recv_port, send_port)
         self.pkt_ext = PacketExtractor(recv_port, send_port)
+        # helper object
+        self.helper = ProcessPacket(recv_port, send_port)
         self.expected_seq = 0
         self.logger = logging.getLogger("TcpServer")
         self.logger.setLevel(logging.INFO)
@@ -89,6 +92,7 @@ class TcpServer(object):
             try:
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(RECV_BUFFER + HEADER_LENGTH)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
+                # extract params from packet
                 header_params, self.seq_num_from, self.ack_num_from, recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("header params", header_params)
                 print("recv packet with seq %s with ack %s"%(self.seq_num_from, self.ack_num_from))
@@ -127,7 +131,7 @@ class TcpServer(object):
                             self.recv_sock.sendto(packet, self.send_addr)
                             # packet inordered, retransmit
                             recv_fin_flag = 0
-                        if recv_fin_flag and self.is_write_file_completed():
+                        if recv_fin_flag:
                             self.log_file.write(log + " FIN\n")
                             send_data = self.pkt_ext                       \
                                             .get_data_from_packet          \
@@ -142,9 +146,7 @@ class TcpServer(object):
                             print("expected ack %s, ack received %s" %(self.expected_seq, self.seq_num_from))
                             if self.expected_seq == self.seq_num_from and       \
                             self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
-                                send_data = self.pkt_ext                   \
-                                                .get_data_from_packet      \
-                                                        (recvd_pkt).decode()
+                                send_data = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
                                 self.write_file_buffer                     \
                                     (self.seq_num_from, send_data)
                                 progress_bar(os.path.getsize(self.file_write.name), self.file_size)
@@ -179,7 +181,7 @@ class TcpServer(object):
                  os.remove(self.file_write.name)
         self.recv_sock.close()
 
-
+# -----------TCP start and close----------------
     def start_tcp_server(self):
         self.status = True
 
@@ -188,10 +190,6 @@ class TcpServer(object):
         self.file_write.close()
         self.log_file.close()
         self.status = False
-
-
-    def run(self):
-        self.tcp_recv_pkt()  
 
 
 if __name__ == "__main__":
