@@ -1,9 +1,10 @@
-import datetime
-import logging
+
 import os
-import socket
 import sys
 import time
+import socket
+import logging
+import datetime
 
 # multi-threading for acks and pkts
 from threading import Thread
@@ -19,16 +20,13 @@ from helper.helper import ProcessPacket
 from packets.packet import RECV_BUFFER, calculate_checksum
 from packets.packet import PacketGenerator, PacketExtractor, UnackedPacket
 
-# params to set
-# TIME_OUT     = 0.5 # sec
-localhost    = socket.gethostbyname(socket.gethostname())
+# socket port, ip address
 default_port = 8080
+localhost = socket.gethostbyname(socket.gethostname())
 
 class TcpClient(object):
-    def __init__(self, send_ip=localhost, send_port=default_port,            \
-                       recv_ip=localhost, recv_port=default_port+2,          \
-                       filename="data/sendfile.txt",                             \
-                       log_name="send_log.txt", window_size=1):
+    def __init__(self, send_ip=localhost, send_port=default_port, recv_ip=localhost, recv_port=default_port+2,          \
+                       filename="data/sendfile.txt", log_name="send_log.txt", window_size=1):
         # socket related variables
         self.send_addr   = (send_ip, send_port)
         self.tcp_client_sock = init_send_socket((send_ip, send_port))
@@ -36,18 +34,17 @@ class TcpClient(object):
         self.recv_addr   = (recv_ip, recv_port)
         # file variables
         self.sent_file   = open(filename, "rb")
-        self.log_file    = [sys.stdout, open(log_name, "w")]                 \
-                           [log_name != "stdout"]
+        self.log_file    = [sys.stdout, open(log_name, "w")][log_name != "stdout"]
         self.file_size   = os.path.getsize(filename)
         # acks, seq, timer
         self.seq_num_from = 0
         self.ack_num_from = 0
         self.estimated_rtt = 0.5
         # base, dup, window size, buffer
-        self.base = 0
-        self.window_size = window_size
-        self.dup_time = 0
         self.buf = []
+        self.base = 0
+        self.dup_time = 0
+        self.window_size = window_size
         # client status, file trans finish flag
         self.status      = None
         self.recv_fin_flag = False
@@ -57,6 +54,7 @@ class TcpClient(object):
         self.pkt_ext     = PacketExtractor(send_port, recv_port)
         # helper object
         self.helper = ProcessPacket(recv_port, send_port)
+        # count for segement sent times and retransmit times
         self.segment_count  = 0
         self.retrans_count  = 0
         self.send_time      = 0
@@ -65,15 +63,13 @@ class TcpClient(object):
         self.logger = logging.getLogger("TcpClient")
         self.logger.setLevel(logging.INFO)
         hd        = logging.StreamHandler()
-        formatter = logging.                                                 \
-                    Formatter                                                \
-                    ("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         hd.setFormatter(formatter)
         self.logger.addHandler(hd)
 
 
     #----------read file--------------------------
-    def read_file_buffer(self, start_bytes):
+    def read_bytes_from_file(self, start_bytes):
         if not self.recv_fin_flag:
             self.logger.debug("read file from %s byte" % start_bytes)
             self.sent_file.seek(start_bytes)
@@ -88,11 +84,7 @@ class TcpClient(object):
         packet = self.pkt_gen.generate_packet(*pkt_params)
         self.logger.debug("checksum: %s" % calculate_checksum(*pkt_params))
         a = self.tcp_client_sock.sendto(packet, self.recv_addr)
-        # push unacked seq # into buf
-        if pkt_params[0] not in self.buf:
-            self.buf.append(pkt_params[0])
-            print("buf now", self.buf)
-        self.send_time = time.time()
+        # self.send_time = time.time()
 
 
     def send_init_packet(self):
@@ -108,8 +100,8 @@ class TcpClient(object):
     #----------retransmit the file --------------------------
     def retransmit_pkt(self):
         self.logger.debug("retransmit!!!")
-        print ("oldest_unacked_pkt: %s" % self.initial_packet.ack_num)
-        if self.initial_packet.ack_num != 0:
+        print ("oldest_unacked_pkt: %s" % self.base)
+        if self.base != 0:
             # initial_seq =  self.initial_packet.ack_num - self.window_size * RECV_BUFFER
             print("initial", self.base)
             # for i in range(self.window_size):
@@ -121,20 +113,20 @@ class TcpClient(object):
             #     if i == 0:
             #         self.initial_packet.ack_num = ack_num
             #         self.initial_packet.begin_time = time.time()
-            #     data_bytes = self.read_file_buffer(seq_num)
+            #     data_bytes = self.read_bytes_from_file(seq_num)
             #     fin_flag = len(data_bytes) == 0
             #     self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
             self.retransmit_counter()
             seq_num = self.ack_num_from
             ack_num = self.seq_num_from + RECV_BUFFER
             self.logger.debug("retransmit_seq_num: %s" % seq_num)
-            data_bytes = self.read_file_buffer(seq_num)
+            data_bytes = self.read_bytes_from_file(seq_num)
             fin_flag = len(data_bytes) == 0
             self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
         else :
             print("retransmit the start file info")
-            self.send_init_packet()
-        self.send_time = time.time()
+            self.send_init_packet()# restart timer
+        # self.restart_timer()
 
     # -----------------handle on time --------------------------------
 
@@ -149,16 +141,20 @@ class TcpClient(object):
             except KeyboardInterrupt or SystemExit:
                 print ("\nExit...bye")
 
-    # function to estimate rtt
+    # function to compute estimate rtt
     def rtt_estimation(self):
         sample_rtt = time.time() - self.send_time
         self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
 
     # function to judge time out
     def handle_timeout(self):
-        if self.initial_packet.begin_time is None:
+        if not self.send_time:
             return False
-        return time.time() - self.initial_packet.begin_time >= self.estimated_rtt
+        return time.time() - self.send_time >= self.estimated_rtt
+
+    # start timer
+    def restart_timer(self):
+        self.send_time = time.time()
 
 
     # method to send packet
@@ -174,11 +170,8 @@ class TcpClient(object):
                 print("client recv on %s with packet %s "% (self.recv_addr, recv_packet))
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recv_packet)
                 print("packet header", header_params)
-                log = str(datetime.datetime.now()) + " " +         \
-                    str(self.recv_addr[1]) + " " +               \
-                    str(self.send_addr[1]) + " " +               \
-                    str(self.seq_num_from) + " " +                    \
-                    str(self.ack_num_from)
+                log = str(datetime.datetime.now()) + " " +  str(self.recv_addr[1]) + " " +               \
+                    str(self.send_addr[1]) + " " +  str(self.seq_num_from) + " " +  str(self.ack_num_from)
                 #----------file transfer finished--------------------------
                 if self.recv_fin_flag:
                     log += " ACK FIN"
@@ -200,12 +193,19 @@ class TcpClient(object):
                         self.rtt_estimation()
                         log += " " + str(self.estimated_rtt) + "\n"
                         self.log_file.write(log)
-                        # calculate seq # and ack # to send, and judge if
+                        # calculate seq # and ack # to send, and judge if the file finishes
                         seq_num  = self.ack_num_from    
                         ack_num  = self.seq_num_from + RECV_BUFFER
                         fin_flag = ack_num >= self.file_size
-                        data_bytes = self.read_file_buffer(seq_num)
+                        # read bytes fromm file
+                        data_bytes = self.read_bytes_from_file(seq_num)
                         self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
+                        # restart timer
+                        self.restart_timer()
+                        # push sent but unacked seq # into buf
+                        if seq_num not in self.buf:
+                            self.buf.append(seq_num)
+                            print("buf now", self.buf)
                         print("send seq %s ack %s"%(seq_num, ack_num))
                         if self.base != self.seq_num_from:
                             self.buf.remove(self.seq_num_from)
@@ -214,13 +214,15 @@ class TcpClient(object):
                         if self.base == self.seq_num_from:
                             self.base = self.buf[0] + RECV_BUFFER
                             self.buf.remove(self.seq_num_from)
+                            print("remove acked %s seq from buf"%self.seq_num_from)
+                            print(self.buf)
                             print("move window base to", self.base)
                             self.initial_packet.ack_num = ack_num
                             self.initial_packet.begin_time = time.time()
                     # received ACKs fall out of the window size range
                     else:
                         self.dup_time += 1
-                        self.rtt_estimation()
+                        # self.rtt_estimation()
                         log += " " + str(self.estimated_rtt) + "\n"
                         self.log_file.write(log)
                         # fast retransmit

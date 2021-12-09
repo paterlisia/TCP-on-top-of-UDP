@@ -35,7 +35,7 @@ Some explanations for args:
 
 start newudpl:
 ```bash
-./newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -B30000 -L50 -O30 -d0.6
+newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
 ```
 
 - example: test on my computer(macos)
