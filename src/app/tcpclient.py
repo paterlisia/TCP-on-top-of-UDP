@@ -74,11 +74,13 @@ class TcpClient(object):
 
     #----------read file--------------------------
     def read_file_buffer(self, start_bytes):
-        self.logger.debug("read file from %s byte" % start_bytes)
-        self.sent_file.seek(start_bytes)
-        data_bytes = self.sent_file.read(RECV_BUFFER)
-        self.logger.debug("data_len: %s bytes" % len(data_bytes))
-        return data_bytes
+        if not self.recv_fin_flag:
+            self.logger.debug("read file from %s byte" % start_bytes)
+            self.sent_file.seek(start_bytes)
+            data_bytes = self.sent_file.read(RECV_BUFFER)
+            self.logger.debug("data_len: %s bytes" % len(data_bytes))
+            return data_bytes
+        return "".encode()
 
     # ----------send packet of file---------------
     def send_pkt(self, *pkt_params):
@@ -87,7 +89,19 @@ class TcpClient(object):
         self.logger.debug("checksum: %s" % calculate_checksum(*pkt_params))
         a = self.tcp_client_sock.sendto(packet, self.recv_addr)
         # push unacked seq # into buf
-        self.buf.append(pkt_params[0])
+        if pkt_params[0] not in self.buf:
+            self.buf.append(pkt_params[0])
+            print("buf now", self.buf)
+        self.send_time = time.time()
+
+
+    def send_init_packet(self):
+        packet = self.pkt_gen.generate_packet(0, 0, 0, \
+                            ("start file tranfer:%s:%s" %(self.window_size, self.file_size)).encode())
+        self.tcp_client_sock.sendto(packet, self.recv_addr)
+        if 0 not in self.buf:
+            self.buf.append(0)
+        self.initial_packet.begin_time = time.time()
         self.send_time = time.time()
 
 
@@ -147,15 +161,6 @@ class TcpClient(object):
         return time.time() - self.initial_packet.begin_time >= self.estimated_rtt
 
 
-    def send_init_packet(self):
-        packet = self.pkt_gen.generate_packet(0, 0, 0, \
-                            ("start file tranfer:%s:%s" %(self.window_size, self.file_size)).encode())
-        self.tcp_client_sock.sendto(packet, self.recv_addr)
-        self.buf.append(0)
-        self.initial_packet.begin_time = time.time()
-        self.send_time = time.time()
-
-
     # method to send packet
     def tcp_send_pkt(self):
         #----------send start client info to server---------------------
@@ -189,7 +194,8 @@ class TcpClient(object):
                     print(self.initial_packet.ack_num, self.seq_num_from)
                     # if self.initial_packet.ack_num == self.seq_num_from:
                     # range can be accepted without receiving acks
-                    if self.base + self.window_size >= self.ack_num_from and self.base >= self.ack_num_from:
+                    print("compare:", self.ack_num_from, self.base)
+                    if self.base + self.window_size >= self.ack_num_from and self.base <= self.ack_num_from:
                         #  estimate rtt and update
                         self.rtt_estimation()
                         log += " " + str(self.estimated_rtt) + "\n"
@@ -199,12 +205,15 @@ class TcpClient(object):
                         ack_num  = self.seq_num_from + RECV_BUFFER
                         fin_flag = ack_num >= self.file_size
                         data_bytes = self.read_file_buffer(seq_num)
-                        self.send_pkt (seq_num, ack_num, fin_flag, data_bytes)
+                        self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
                         print("send seq %s ack %s"%(seq_num, ack_num))
-                        self.buf.remove(self.seq_num_from)
+                        if self.base != self.seq_num_from:
+                            self.buf.remove(self.seq_num_from)
+                            print("remove acked %s seq from buf"%self.seq_num_from)
                         # update unACKed segment with smallest seq #
                         if self.base == self.seq_num_from:
-                            self.base = self.buf[0]
+                            self.base = self.buf[0] + RECV_BUFFER
+                            self.buf.remove(self.seq_num_from)
                             print("move window base to", self.base)
                             self.initial_packet.ack_num = ack_num
                             self.initial_packet.begin_time = time.time()

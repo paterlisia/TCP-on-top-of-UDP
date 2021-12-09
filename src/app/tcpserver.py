@@ -142,7 +142,7 @@ class TcpServer(object):
                             self.close_tcp_server()
                             print ("Delivery completed successfully")
                         else:
-                            # self.log_file.write(log + "\n")
+                            self.log_file.write(log + "\n")
                             print("expected ack %s, ack received %s" %(self.expected_seq, self.seq_num_from))
                             if self.expected_seq == self.seq_num_from and       \
                             self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
