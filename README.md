@@ -41,15 +41,15 @@ start newudpl:
 - example: test on my computer(macos)
     - start newudpl
     ```bash
-    ./newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -B30000 -L50 -O30 -d0.6
+        newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
     ```
     - start tcpserver
     ```bash
-        python tcpserver.py data/received.pdf 8082 192.168.1.210 8080 log/recv_log.txt
+        python src/app/tcpserver.py src/app/data/receivefile.txt 8082 192.168.1.210 8080 src/app/data/recv_log.txt 
     ```
     - start tcpclient
     ```bash
-        python tcpclient.py data/file.pdf 192.168.1.210 41192 8080 log/send_log.txt 1000
+        python src/app/tcpclient.py src/app/data/sendfile.txt  192.168.1.210 41192 8080 src/app/data/send_log.txt 1152
     ```
 
 2. run the `start-client.sh` and `start-server.sh` file
@@ -61,6 +61,44 @@ start newudpl:
 ## 
 
 ## project structure
+```
+📦src
+ ┣ 📂app
+ ┃ ┣ 📂data
+ ┃ ┃ ┣ 📜receivefile.txt
+ ┃ ┃ ┣ 📜recv_log.txt
+ ┃ ┃ ┣ 📜send_log.txt
+ ┃ ┃ ┗ 📜sendfile.txt
+ ┃ ┣ 📂error
+ ┃ ┃ ┣ 📂__pycache__
+ ┃ ┃ ┃ ┣ 📜__init__.cpython-38.pyc
+ ┃ ┃ ┃ ┗ 📜error.cpython-38.pyc
+ ┃ ┃ ┣ 📜__init__.py
+ ┃ ┃ ┗ 📜error.py
+ ┃ ┣ 📂helper
+ ┃ ┃ ┣ 📂__pycache__
+ ┃ ┃ ┃ ┣ 📜__init__.cpython-38.pyc
+ ┃ ┃ ┃ ┗ 📜helper.cpython-38.pyc
+ ┃ ┃ ┣ 📜__init__.py
+ ┃ ┃ ┗ 📜helper.py
+ ┃ ┣ 📂packets
+ ┃ ┃ ┣ 📂__pycache__
+ ┃ ┃ ┃ ┣ 📜__init__.cpython-38.pyc
+ ┃ ┃ ┃ ┗ 📜packet.cpython-38.pyc
+ ┃ ┃ ┣ 📜__init__.py
+ ┃ ┃ ┗ 📜packet.py
+ ┃ ┣ 📂utils
+ ┃ ┃ ┣ 📂__pycache__
+ ┃ ┃ ┃ ┣ 📜__init__.cpython-38.pyc
+ ┃ ┃ ┃ ┗ 📜utils.cpython-38.pyc
+ ┃ ┃ ┣ 📜__init__.py
+ ┃ ┃ ┗ 📜utils.py
+ ┃ ┣ 📜.DS_Store
+ ┃ ┣ 📜tcpclient.py
+ ┃ ┗ 📜tcpserver.py
+ ┣ 📂test
+ ┗ 📜.DS_Store
+```
 
 ## Maintainer
 - [Jing Peng](https://github.com/paterlisia)
