@@ -12,6 +12,7 @@ from utils.utils import init_recv_socket, progress_bar
 from error.error import recv_arg_parser
 
 # make packets utils
+from helper.helper import ProcessPacket
 from packets.packet import RECV_BUFFER, HEADER_LENGTH
 from packets.packet import PacketGenerator, PacketExtractor
 from helper.helper import ProcessPacket
@@ -32,6 +33,8 @@ class TcpServer(object):
         self.file_size = 0
         self.send_addr = (send_ip, int(send_port))
         self.file_write = open(filename, "w")
+        # helper object
+        self.helper = ProcessPacket(recv_port, send_port)
         # acks, seq, timer
         self.seq_num_to = 0
         self.seq_num_from = 0

@@ -51,6 +51,8 @@ class TcpClient(object):
         # client status, file trans finish flag
         self.status      = None
         self.recv_fin_flag = False
+        # helper object
+        self.helper = ProcessPacket(recv_port, send_port)
         self.pkt_gen     = PacketGenerator(send_port, recv_port)
         self.pkt_ext     = PacketExtractor(send_port, recv_port)
         # helper object
