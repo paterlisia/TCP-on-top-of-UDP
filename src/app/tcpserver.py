@@ -42,6 +42,8 @@ class TcpServer(object):
         self.ack_num_to = 0
         self.estimated_rtt = 0
         self.recv_fin_flag = 0
+        # buffer
+        self.buf = {}
         self.log_file = [sys.stdout, open(
             log_name, "w")][log_name != "stdout"]
         self.pkt_gen = PacketGenerator(recv_port, send_port)
@@ -91,6 +93,7 @@ class TcpServer(object):
         print (("start tcp server on %s with port %s ...")% (self.recv_ip, self.recv_port))
         while self.status:
             try:
+                # -------------- receive pkt from tcpclient---------------------
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(MSS + HEADER_LENGTH)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
@@ -108,30 +111,31 @@ class TcpServer(object):
                     packet = self.pkt_gen.generate_packet(self.seq_num_to, self.ack_num_to, 0)
                     self.recv_sock.sendto(packet, self.send_addr)
                 else:
+                    # get the filesize for progress bar
                     if "start file tranfer".encode() in recvd_pkt:
                         send_packet = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
-                        msg, window_size, self.file_size =            \
-                                                    send_packet.split(':')
+                        msg, window_size, self.file_size = send_packet.split(':')
                         self.file_size   = int(self.file_size)
                         self.logger.debug("file_size: %s" % self.file_size)
                         seq_num  = self.ack_num_from
                         ack_num  = self.seq_num_from + MSS  # seq number of next byte expected from the client
                         print("acks", self.seq_num_from)
                         fin_flag = 0
-                        packet = self.pkt_gen                      \
-                                        .generate_packet              \
-                                        (0, 0, fin_flag, "got it".encode())
+                        packet = self.pkt_gen.generate_packet(0, 0, fin_flag, "got it".encode())
                         self.recv_sock.sendto(packet, self.send_addr)
                         print("send seq %s ack %s"%(seq_num, ack_num))
                     else:
+
+                        #------------1. check checksum, resend if checksum is not right-----------------
+
                         if not self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
                             print("packet corrupted, checksum does not confirm, retransmit")
-                            packet = self.pkt_gen                      \
-                                            .generate_packet              \
-                                            (self.seq_num_to, self.ack_num_to, 0)
+                            packet = self.pkt_gen.generate_packet(self.seq_num_to, self.ack_num_to, 0)
                             self.recv_sock.sendto(packet, self.send_addr)
                             # packet inordered, retransmit
                             self.recv_fin_flag = 0
+                        
+                        #-----------2. check is the file has been fully transmitted---------------
                         if self.recv_fin_flag:
                             self.log_file.write(log + " FIN\n")
                             send_data = self.pkt_ext.get_data_from_packet(recvd_pkt)
@@ -143,35 +147,55 @@ class TcpServer(object):
                         else:
                             self.log_file.write(log + "\n")
                             print("expected ack %s, ack received %s" %(self.expected_seq, self.seq_num_from))
-                            if self.expected_seq == self.seq_num_from and       \
-                            self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
-                                send_data = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
-                                self.write_file_buffer                     \
-                                    (self.seq_num_from, send_data)
+                            send_data = self.pkt_ext.get_data_from_packet(recvd_pkt).decode()
+                            
+                            # ---------3. check seq number, if seq # = expected, send culmalative ack--------------------
+                            if self.expected_seq == self.seq_num_from:
+
+                            # ---------3.1 extract data from pkt and record file--------------------
+                                self.write_file_buffer(self.seq_num_from, send_data)
                                 progress_bar(os.path.getsize(self.file_write.name), self.file_size)
+
+                            # ---------3.2 update seq_num and ack_num--------------------
+
                                 seq_num  = self.ack_num_from
                                 ack_num  = self.seq_num_from + MSS
                                 self.logger.debug("seq_num: %s" % seq_num)
                                 self.logger.debug("ack_num: %s" % ack_num)
-                                # flag means the file has been fully received
-                                # fin_flag = ack_num >= self.file_size
-                                packet = self.pkt_gen                      \
-                                            .generate_packet              \
-                                            (seq_num, ack_num, self.recv_fin_flag)
-                                # self.recv_fin_flag = fin_flag
-                                self.recv_sock.sendto(packet, self.send_addr)
                                 print("send seq %s ack %s"%(seq_num, ack_num))
-                                print("finsih, ", self.recv_fin_flag)
+
+                            # ---------3.3 update expected seq number--------------------
+
                                 self.ack_num_to = self.seq_num_from + MSS
                                 self.seq_num_to = self.ack_num_from
                                 self.expected_seq = ack_num
-                            else:
-                                print("expected ack not correct, dismiss packet")
-                                # ack the previous packet
-                                packet = self.pkt_gen                      \
-                                                .generate_packet              \
-                                                (self.seq_num_to, self.ack_num_to, 0)
+
+                            # ---------3.4 update expected seq number if arriving seg fills in gap---------
+
+                                while self.expected_seq in self.buf:
+                             # -----3.4.1 write data into file---------------------------------------
+                                    self.write_file_buffer(self.expected_seq, self.buf[self.expected_seq])
+
+                             # -----3.4.2 remove written data seq in buf-----------------------------
+                                    del self.buf[self.expected_seq]
+                                    self.expected_seq += MSS
+                                    
+                            # ---------3.5 send ack with the new start of the smallest seq number in buffer---------
+                                
+                                packet = self.pkt_gen.generate_packet(seq_num, self.expected_seq, self.recv_fin_flag)
                                 self.recv_sock.sendto(packet, self.send_addr)
+                            # ---------3. arrival of out-of-order seg with higher than expected seq #-------
+                            else:
+                                # ---------3.1 push into buffer with (seq # , data_str)-----------------
+
+                                self.buf[self.seq_num_from] = send_data
+                                print("push seq num %s to buf"%self.seq_num_from)
+
+                                # ---------3.2 send duplicate ack, ack the previous packet----------------
+
+                                packet = self.pkt_gen.generate_packet(self.seq_num_to, self.expected_seq, 0)
+                                self.recv_sock.sendto(packet, self.send_addr)
+                                print("send duplicate with ack ", self.expected_seq)
                                 self.logger.debug("expected_seq not correct or packet corrupted")
                                 self.logger.debug("expected_seq: %s" % self.expected_seq)
                                 self.logger.debug("recv_seq_num: %s, ignore" % self.seq_num_from)
