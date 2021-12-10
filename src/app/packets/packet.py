@@ -3,7 +3,7 @@ import struct
 # ! means network packet, I means short int(2 bytes), H means int(4 bytes)
 HEADER_FORMAT = "!HHIIHHHH"
 HEADER_LENGTH = 20
-RECV_BUFFER   = 576
+MSS   = 576
 SORC_PORT_POS = 0
 DEST_PORT_POS = 1
 SEQ_NUM_POS   = 2

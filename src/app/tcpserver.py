@@ -13,7 +13,7 @@ from error.error import recv_arg_parser
 
 # make packets utils
 from helper.helper import ProcessPacket
-from packets.packet import RECV_BUFFER, HEADER_LENGTH
+from packets.packet import MSS, HEADER_LENGTH
 from packets.packet import PacketGenerator, PacketExtractor
 from helper.helper import ProcessPacket
 
@@ -91,7 +91,7 @@ class TcpServer(object):
         print (("start tcp server on %s with port %s ...")% (self.recv_ip, self.recv_port))
         while self.status:
             try:
-                recvd_pkt, recvd_addr = self.recv_sock.recvfrom(RECV_BUFFER + HEADER_LENGTH)
+                recvd_pkt, recvd_addr = self.recv_sock.recvfrom(MSS + HEADER_LENGTH)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
@@ -115,7 +115,7 @@ class TcpServer(object):
                         self.file_size   = int(self.file_size)
                         self.logger.debug("file_size: %s" % self.file_size)
                         seq_num  = self.ack_num_from
-                        ack_num  = self.seq_num_from + RECV_BUFFER  # seq number of next byte expected from the client
+                        ack_num  = self.seq_num_from + MSS  # seq number of next byte expected from the client
                         print("acks", self.seq_num_from)
                         fin_flag = 0
                         packet = self.pkt_gen                      \
@@ -134,14 +134,12 @@ class TcpServer(object):
                             self.recv_fin_flag = 0
                         if self.recv_fin_flag:
                             self.log_file.write(log + " FIN\n")
-                            send_data = self.pkt_ext                       \
-                                            .get_data_from_packet          \
-                                                    (recvd_pkt)
+                            send_data = self.pkt_ext.get_data_from_packet(recvd_pkt)
                             self.write_file_buffer(self.seq_num_from, send_data.decode())
                             self.send_close_request                        \
                                 (self.seq_num_from, self.ack_num_from, self.recv_fin_flag)
                             self.close_tcp_server()
-                            print ("Delivery completed successfully")
+                            print ("File transmited successfully~")
                         else:
                             self.log_file.write(log + "\n")
                             print("expected ack %s, ack received %s" %(self.expected_seq, self.seq_num_from))
@@ -152,8 +150,7 @@ class TcpServer(object):
                                     (self.seq_num_from, send_data)
                                 progress_bar(os.path.getsize(self.file_write.name), self.file_size)
                                 seq_num  = self.ack_num_from
-                                ack_num  = self.seq_num_from                    \
-                                        + RECV_BUFFER
+                                ack_num  = self.seq_num_from + MSS
                                 self.logger.debug("seq_num: %s" % seq_num)
                                 self.logger.debug("ack_num: %s" % ack_num)
                                 # flag means the file has been fully received
@@ -165,7 +162,7 @@ class TcpServer(object):
                                 self.recv_sock.sendto(packet, self.send_addr)
                                 print("send seq %s ack %s"%(seq_num, ack_num))
                                 print("finsih, ", self.recv_fin_flag)
-                                self.ack_num_to = self.seq_num_from + RECV_BUFFER
+                                self.ack_num_to = self.seq_num_from + MSS
                                 self.seq_num_to = self.ack_num_from
                                 self.expected_seq = ack_num
                             else:
