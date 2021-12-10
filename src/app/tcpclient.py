@@ -8,6 +8,7 @@ import datetime
 
 # multi-threading for acks and pkts
 from threading import Thread
+from threading import Lock
 from threading import ThreadError
 # utils 
 from utils.utils import init_send_socket
@@ -17,7 +18,7 @@ from error.error import send_arg_parser
 
 # packets
 from helper.helper import ProcessPacket
-from packets.packet import RECV_BUFFER, calculate_checksum
+from packets.packet import MSS, calculate_checksum
 from packets.packet import PacketGenerator, PacketExtractor, UnackedPacket
 
 # socket port, ip address
@@ -37,9 +38,14 @@ class TcpClient(object):
         self.log_file    = [sys.stdout, open(log_name, "w")][log_name != "stdout"]
         self.file_size   = os.path.getsize(filename)
         # acks, seq, timer
+        self.seq_num = 0
         self.seq_num_from = 0
         self.ack_num_from = 0
         self.estimated_rtt = 0.5
+        # lock to lock the shared variables
+        self.header_lock = Lock()
+        self.timer_lock = Lock()
+        self.window_lock = Lock()
         # base, dup, window size, buffer
         self.buf = []
         self.base = 0
@@ -57,7 +63,9 @@ class TcpClient(object):
         # count for segement sent times and retransmit times
         self.segment_count  = 0
         self.retrans_count  = 0
+        self.is_timer = False
         self.send_time      = 0
+        self.sample_rtt_pkt = (-1, -1) # (seq#, time)
         self.initial_packet = UnackedPacket()
         # logging module init
         self.logger = logging.getLogger("TcpClient")
@@ -73,7 +81,7 @@ class TcpClient(object):
         if not self.recv_fin_flag:
             self.logger.debug("read file from %s byte" % start_bytes)
             self.sent_file.seek(start_bytes)
-            data_bytes = self.sent_file.read(RECV_BUFFER)
+            data_bytes = self.sent_file.read(MSS)
             self.logger.debug("data_len: %s bytes" % len(data_bytes))
             return data_bytes
         return "".encode()
@@ -83,18 +91,21 @@ class TcpClient(object):
         self.segment_counter()
         packet = self.pkt_gen.generate_packet(*pkt_params)
         self.logger.debug("checksum: %s" % calculate_checksum(*pkt_params))
-        a = self.tcp_client_sock.sendto(packet, self.recv_addr)
-        # self.send_time = time.time()
+        try:
+            a = self.tcp_client_sock.sendto(packet, self.recv_addr)
+        except OSError:
+            print("connection close, exit...")
+            self.logger.debug("connection close")
 
 
     def send_init_packet(self):
-        packet = self.pkt_gen.generate_packet(0, 0, 0, \
-                            ("start file tranfer:%s:%s" %(self.window_size, self.file_size)).encode())
+        packet = self.pkt_gen.generate_packet(0, 0, 0, ("start file tranfer:%s:%s" %(self.window_size, self.file_size)).encode())
+        print("send pkts, ", packet)
         self.tcp_client_sock.sendto(packet, self.recv_addr)
         if 0 not in self.buf:
             self.buf.append(0)
-        self.initial_packet.begin_time = time.time()
-        self.send_time = time.time()
+        # self.initial_packet.begin_time = time.time()
+        # self.send_time = time.time()
 
 
     #----------retransmit the file --------------------------
@@ -102,13 +113,13 @@ class TcpClient(object):
         self.logger.debug("retransmit!!!")
         print ("oldest_unacked_pkt: %s" % self.base)
         if self.base != 0:
-            # initial_seq =  self.initial_packet.ack_num - self.window_size * RECV_BUFFER
+            # initial_seq =  self.initial_packet.ack_num - self.window_size * MSS
             print("initial", self.base)
             # for i in range(self.window_size):
             #     self.retransmit_counter()
-            #     seq_num = self.base + i * RECV_BUFFER
+            #     seq_num = self.base + i * MSS
             #     self.logger.debug("retransmit_seq_num: %s" % seq_num)
-            #     ack_num = seq_num + self.window_size * RECV_BUFFER
+            #     ack_num = seq_num + self.window_size * MSS
             #     self.logger.debug("retransmit_ack_num: %s" % ack_num)
             #     if i == 0:
             #         self.initial_packet.ack_num = ack_num
@@ -118,7 +129,7 @@ class TcpClient(object):
             #     self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
             self.retransmit_counter()
             seq_num = self.ack_num_from
-            ack_num = self.seq_num_from + RECV_BUFFER
+            ack_num = self.seq_num_from + MSS
             self.logger.debug("retransmit_seq_num: %s" % seq_num)
             data_bytes = self.read_bytes_from_file(seq_num)
             fin_flag = len(data_bytes) == 0
@@ -128,22 +139,52 @@ class TcpClient(object):
             self.send_init_packet()# restart timer
         # self.restart_timer()
 
+    # -----------------handle on retransmiting the pkts --------------
+    def retransmit_pkts(self):
+
+        # ------------ 1. get the smallest seq # (also the ack recv from server) that is not acked to be transmitted----
+
+        seq_num = self.base
+        ack_num = self.base + MSS
+        self.logger.debug("retransmit_seq_num: %s" % seq_num)
+        data_bytes = self.read_bytes_from_file(seq_num)
+        fin_flag = len(data_bytes) == 0
+
+        # ------------2. retransmit the data ----------------
+
+        self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
+
+        # ------------ restart timer ------------------------
+        self.restart_timer()
+        # -----------3. clear sample rtt if retransmit the sample rtt seq-----------
+
+        with self.timer_lock:
+            if self.sample_rtt_pkt[0] == self.base:
+                self.sample_rtt_pkt = (-1, -1)
+        
+        # count retransmit times
+        self.retransmit_counter()
+
+
     # -----------------handle on time --------------------------------
 
-    # handle timeout situation: retransmission
+    # *thread: handle timeout situation: retransmission
     def timer(self):
         print("start timer thread")
-        while self.status:
-            try:
-                if self.handle_timeout():
-                    print("Warnig: timeout, retransmit packet: ", self.initial_packet.ack_num)
-                    self.retransmit_pkt()
-            except KeyboardInterrupt or SystemExit:
-                print ("\nExit...bye")
+        while not self.recv_fin_flag:
+            if self.handle_timeout():
+                # handle on init pkt retransmit
+                if not self.status:
+                    self.send_init_packet()
+                else:
+                    print("Warnig: timeout, retransmit packet: ", self.base)
+                    self.logger.debug("Warnig: timeout, retransmit packet: ", self.base)
+                    self.retransmit_pkts()
 
     # function to compute estimate rtt
     def rtt_estimation(self):
-        sample_rtt = time.time() - self.send_time
+        sample_rtt = time.time() - self.sample_rtt_pkt[1]
+        print("sample rtt:", sample_rtt)
         self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
 
     # function to judge time out
@@ -156,8 +197,138 @@ class TcpClient(object):
     def restart_timer(self):
         self.send_time = time.time()
 
+    # set a timer
+    def set_timer(self, status):
+        self.is_timer = status
 
-    # method to send packet
+
+    #------------------TCP recv acks and send pkt threads------------
+    # *thread: to recv acks from the server
+    def tcp_recv_acks(self):
+        print ("-------start TcpClient recv acks on %s with port %s ---"% self.send_addr)
+        while not self.recv_fin_flag:
+            #----------1. receive data from client--------------------------
+
+            recv_packet, recv_addr = self.tcp_client_sock.recvfrom(MSS)
+            print("client recv on %s with packet %s "% (self.recv_addr, recv_packet))
+            with self.header_lock:
+                header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recv_packet)
+            print("packet header", header_params)
+            log = str(datetime.datetime.now()) + " " +  str(self.recv_addr[1]) + " " +               \
+                str(self.send_addr[1]) + " " +  str(self.seq_num_from) + " " +  str(self.ack_num_from)
+                
+            # handle on progress bar recv info, start send file after this ack
+            if "got it".encode() in recv_packet:
+                print("recv init pkt, start send pkts thread")
+                self.status = True
+            # ------2. recv fin_flag: record log, print conclusion, and close connection---------
+
+            if self.recv_fin_flag:
+                log += " ACK FIN"
+                # self.rtt_estimation()
+                log += " " + str(self.estimated_rtt) + "\n"
+                self.log_file.write(log)
+                print ("File transmited successfully~")
+                self.print_transfer_stats()
+                self.close_tcp_client()
+
+            # ------3. not finished----------------
+            else:
+
+                # -----3.1 receive duplicate acks
+
+                if self.ack_num_from == self.base:
+                    self.dup_time += 1
+                    # self.rtt_estimation()
+                    log += " " + str(self.estimated_rtt) + "\n"
+                    self.log_file.write(log)
+                    # fast retransmit
+                    if self.dup_time >= 3:
+                        print("packet corrupted, retransmit packet")
+                        self.retransmit_pkts()
+                        self.dup_time = 0
+                        self.logger.debug("expected_ack not correct, retransmit packet")
+                        self.logger.debug("smallest unacked seq # %s" % self.initial_packet.ack_num)
+
+                # ------3.2 receive ack value of self.ack_num_from---------------------------
+
+                else:
+                    # clear the duplicate times if received a different ack
+                    self.dup_time = 0
+
+                    # -----3.2.1 calculate sample rtt and update estimate rtt-----------------
+
+                    with self.timer_lock:
+                        # current sample rtt has been recorded
+                        if self.sample_rtt_pkt[0] != -1:
+                            # *receive ack for current sample rtt pkt, update estimate rtt
+                            if self.ack_num_from == self.sample_rtt_pkt[0]:
+                                self.rtt_estimation()
+                            # reset sample rtt if did not get the right ack
+                            self.sample_rtt_pkt = (-1, -1)
+                    
+                    # -----3.2.2 update buffer: pop all the pkts that have been acked
+
+                    while self.buf and self.buf[0] <= self.ack_num_from:
+                        print("remove seq %s from buf"%self.buf[0])
+                        self.buf.pop()
+                    
+                    # -----3.2.3 update send base: update the smallest sent but not yet acked seq #
+
+                    with self.window_lock:
+                        self.base = self.ack_num_from
+                        print("update send base with acks: ", self.ack_num_from)
+
+                    #--------handle on timer: 1. restart timer if the ack != base(last ack loss) 2. stop timer otherwise
+                    with self.timer_lock:
+                        if self.base == self.seq_num:
+                            self.restart_timer()
+                        else:
+                            self.set_timer(False)
+
+
+    # *thread: to send pkts to tcpserver
+    def tcp_send_pkts(self):
+        print ("-------start TcpClient send pkts on %s with port %s ---"% self.send_addr)
+        self.start_tcp_client()
+        while not self.recv_fin_flag:
+            while self.status:
+                # ------send pkts in the sliding window range--------------------------
+                while self.seq_num + MSS <= self.base + self.window_size and not self.recv_fin_flag:
+
+                    # -------1. generate header: calculate seq, ack, and fin_flag ------
+
+                    seq_num  = self.seq_num    
+                    ack_num  = self.seq_num_from + MSS
+                    # fin_flag = ack_num >= self.file_size
+                    # read bytes from file
+                    data_bytes = self.read_bytes_from_file(seq_num)
+                    fin_flag = self.base == self.seq_num and len(data_bytes) == 0
+
+                    # --------2. update sent but not yet acked seq # into buffer --------
+                    self.buf.append(seq_num)
+                    print("add seq # %s into buffer"%self.seq_num)
+
+                    # --------3. send the pkt -----------------------------------------------
+                    self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
+
+    
+                    # --------4. check if there is a timer has been started and update---
+
+                    with self.timer_lock:
+                        if self.sample_rtt_pkt[0] == -1:
+                            self.sample_rtt_pkt = (self.seq_num, time.time())
+                    
+                    # --------start timer if there is no timer----------------------------
+                        if not self.is_timer:
+                            self.set_timer(True)
+                            self.restart_timer()
+
+                    # --------5. update seq_num-------------------------------------------
+                    self.seq_num += MSS
+
+
+    # *thread: method to send packet
     def tcp_send_pkt(self):
         #----------send start client info to server---------------------
         self.start_tcp_client()
@@ -166,13 +337,13 @@ class TcpClient(object):
         while self.status:
             try:
                 #----------receive data from client--------------------------
-                recv_packet, recv_addr = self.tcp_client_sock.recvfrom(RECV_BUFFER)
+                recv_packet, recv_addr = self.tcp_client_sock.recvfrom(MSS)
                 print("client recv on %s with packet %s "% (self.recv_addr, recv_packet))
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recv_packet)
                 print("packet header", header_params)
                 log = str(datetime.datetime.now()) + " " +  str(self.recv_addr[1]) + " " +               \
                     str(self.send_addr[1]) + " " +  str(self.seq_num_from) + " " +  str(self.ack_num_from)
-                #----------file transfer finished--------------------------
+                #----------file transfer finished---------------------------------
                 if self.recv_fin_flag:
                     log += " ACK FIN"
                     self.rtt_estimation()
@@ -195,7 +366,7 @@ class TcpClient(object):
                         self.log_file.write(log)
                         # calculate seq # and ack # to send, and judge if the file finishes
                         seq_num  = self.ack_num_from    
-                        ack_num  = self.seq_num_from + RECV_BUFFER
+                        ack_num  = self.seq_num_from + MSS
                         fin_flag = ack_num >= self.file_size
                         # read bytes fromm file
                         data_bytes = self.read_bytes_from_file(seq_num)
@@ -212,7 +383,7 @@ class TcpClient(object):
                             print("remove acked %s seq from buf"%self.seq_num_from)
                         # update unACKed segment with smallest seq #
                         if self.base == self.seq_num_from:
-                            self.base = self.buf[0] + RECV_BUFFER
+                            self.base = self.buf[0] + MSS
                             self.buf.remove(self.seq_num_from)
                             print("remove acked %s seq from buf"%self.seq_num_from)
                             print(self.buf)
@@ -241,7 +412,7 @@ class TcpClient(object):
 
     # -----------TCP start and close----------------
     def start_tcp_client(self):
-        self.status = True
+        # self.status = True
         self.send_init_packet()
 
 
@@ -276,11 +447,17 @@ if __name__ == "__main__":
     try:
         tcp_client = TcpClient(**params)
         # thread for handling tcp send pkt
-        client_th = Thread(target=tcp_client.tcp_send_pkt)
+        client_th = Thread(target=tcp_client.tcp_send_pkts)
         client_th.start()
-        # thread to judge timeout event
-        ack_th = Thread(target=tcp_client.timer)
+        # thread to rcv acks
+        ack_th = Thread(target=tcp_client.tcp_recv_acks)
         ack_th.start()
+        # thread to judge timeout event
+        timer_th = Thread(target=tcp_client.timer)
+        timer_th.start()
     except ThreadError as e:
         print ('Fail to open thread. Error: #{0}, {1}'.format(str(e[0]), e[1]))
         sys.exit('Thread Fail')
+    except KeyboardInterrupt or SystemExit:
+            print ("\nExit...bye")
+            tcp_client.close_tcp_client()

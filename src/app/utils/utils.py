@@ -17,7 +17,7 @@ def init_send_socket(address):
 
 def progress_bar(process, filesize):
     progress = process * 50.0 / filesize
-    sys.stdout.write("\rFile Transfering... [%-50s] %d%%" % ('-' * int(progress), 2 * progress))
+    sys.stdout.write("\rFile Transfering... [%-50s] %d%% \n" % ('-' * int(progress), 2 * progress))
     sys.stdout.flush()
     # time.sleep(0.1)
     if progress == 50:
