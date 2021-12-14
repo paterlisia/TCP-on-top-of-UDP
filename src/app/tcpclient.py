@@ -42,6 +42,8 @@ class TcpClient(object):
         self.seq_num_from = 0
         self.ack_num_from = 0
         self.estimated_rtt = 0.5
+        self.dev_rtt =0
+        self.time_out_interval =0.5
         # lock to lock the shared variables
         self.header_lock = Lock()
         self.timer_lock = Lock()
@@ -186,12 +188,14 @@ class TcpClient(object):
         sample_rtt = time.time() - self.sample_rtt_pkt[1]
         print("sample rtt:", sample_rtt)
         self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
+        self.dev_rtt = 0.75 * sample_rtt + 0.25 * sample_rtt - self.estimated_rtt
+        self.time_out_interval = self.estimated_rtt + 4 * self.dev_rtt
 
     # function to judge time out
     def handle_timeout(self):
         if not self.send_time:
             return False
-        return time.time() - self.send_time >= self.estimated_rtt
+        return time.time() - self.send_time >= self.time_out_interval
 
     # start timer
     def restart_timer(self):
@@ -226,7 +230,7 @@ class TcpClient(object):
             if self.recv_fin_flag:
                 log += " ACK FIN"
                 # self.rtt_estimation()
-                log += " " + str(self.estimated_rtt) + "\n"
+                log += " " + str(self.time_out_interval) + "\n"
                 self.log_file.write(log)
                 print ("File transmited successfully~")
                 self.print_transfer_stats()
@@ -240,7 +244,7 @@ class TcpClient(object):
                 if self.ack_num_from == self.base:
                     self.dup_time += 1
                     # self.rtt_estimation()
-                    log += " " + str(self.estimated_rtt) + "\n"
+                    log += " " + str(self.time_out_interval) + "\n"
                     self.log_file.write(log)
                     # fast retransmit
                     if self.dup_time >= 3:
@@ -281,7 +285,7 @@ class TcpClient(object):
 
                     #--------handle on timer: 1. restart timer if the ack != base(last ack loss) 2. stop timer otherwise
                     with self.timer_lock:
-                        if self.base == self.seq_num:
+                        if self.base != self.seq_num:
                             self.restart_timer()
                         else:
                             self.set_timer(False)
@@ -347,7 +351,7 @@ class TcpClient(object):
                 if self.recv_fin_flag:
                     log += " ACK FIN"
                     self.rtt_estimation()
-                    log += " " + str(self.estimated_rtt) + "\n"
+                    log += " " + str(self.time_out_interval) + "\n"
                     self.log_file.write(log)
                     print ("Delivery completed successfully")
                     self.print_transfer_stats()
@@ -362,7 +366,7 @@ class TcpClient(object):
                     if self.base + self.window_size >= self.ack_num_from and self.base <= self.ack_num_from:
                         #  estimate rtt and update
                         self.rtt_estimation()
-                        log += " " + str(self.estimated_rtt) + "\n"
+                        log += " " + str(self.time_out_interval) + "\n"
                         self.log_file.write(log)
                         # calculate seq # and ack # to send, and judge if the file finishes
                         seq_num  = self.ack_num_from    
@@ -394,7 +398,7 @@ class TcpClient(object):
                     else:
                         self.dup_time += 1
                         # self.rtt_estimation()
-                        log += " " + str(self.estimated_rtt) + "\n"
+                        log += " " + str(self.time_out_interval) + "\n"
                         self.log_file.write(log)
                         # fast retransmit
                         if self.dup_time >= 3:

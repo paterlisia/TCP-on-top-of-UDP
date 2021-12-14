@@ -54,9 +54,7 @@ class TcpServer(object):
         self.logger = logging.getLogger("TcpServer")
         self.logger.setLevel(logging.INFO)
         hd = logging.StreamHandler()
-        formatter = logging.                                                 \
-                    Formatter(
-                        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         hd.setFormatter(formatter)
         self.logger.addHandler(hd)
 
