@@ -42,8 +42,8 @@ class TcpClient(object):
         self.seq_num_from = 0
         self.ack_num_from = 0
         self.estimated_rtt = 0.5
-        self.dev_rtt = 0
-        self.time_out_interval = 0.5
+        self.dev_rtt =0
+        self.time_out_interval =0.5
         # lock to lock the shared variables
         self.header_lock = Lock()
         self.timer_lock = Lock()
@@ -285,7 +285,7 @@ class TcpClient(object):
 
                     #--------handle on timer: 1. restart timer if the ack != base(last ack loss) 2. stop timer otherwise
                     with self.timer_lock:
-                        if self.base == self.seq_num:
+                        if self.base != self.seq_num:
                             self.restart_timer()
                         else:
                             self.set_timer(False)

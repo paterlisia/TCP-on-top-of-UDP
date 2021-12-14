@@ -62,8 +62,8 @@ newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
 
 ## project structure
 ```
-📦src
- ┣ 📂app
+📦 src
+ ┣ 📂 app
  ┃ ┣ 📂data
  ┃ ┃ ┣ 📜receivefile.txt
  ┃ ┃ ┣ 📜recv_log.txt
