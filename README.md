@@ -14,7 +14,7 @@ but is close enough. Also, imported `ACK number` and `sequence number` to handle
 ## Install and Run
 - two ways of using this program
 1. By terminal run python scripts
-* **Note:  tested on macos platform
+* **Note:  tested on macos platform**
 
 First, open ....., and input the operations in terminal
 ```bash
@@ -53,7 +53,7 @@ newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
         python3 src/app/tcpclient.py src/app/data/sendfile.txt  192.168.1.210 41192 8080 src/app/data/send_log.txt 1152
     ```
 
-2. run the `start-client.sh` and `start-server.sh` file
+2. run the `start-client.sh` and `start-server.sh` file, but please replace the `IP address` and `port` you want to run on before run the script.
     ```bash
     sh start-client.sh
     sh start-server.sh
