@@ -44,6 +44,7 @@ class TcpClient(object):
         self.estimated_rtt = 0.5
         self.dev_rtt =0
         self.time_out_interval =0.5
+        self.MAX_RANGE = 4294967296  # 2^32-1, which is used for avoiding overflow
         # lock to lock the shared variables
         self.header_lock = Lock()
         self.timer_lock = Lock()
@@ -58,9 +59,8 @@ class TcpClient(object):
         self.recv_fin_flag = False
         # helper object
         self.helper = ProcessPacket(recv_port, send_port)
-        self.pkt_gen     = PacketGenerator(send_port, recv_port)
-        self.pkt_ext     = PacketExtractor(send_port, recv_port)
-        # helper object
+        self.pkt_gen = PacketGenerator(send_port, recv_port)
+        self.pkt_ext = PacketExtractor(send_port, recv_port)
         self.helper = ProcessPacket(recv_port, send_port)
         # count for segement sent times and retransmit times
         self.segment_count  = 0
@@ -72,7 +72,7 @@ class TcpClient(object):
         # logging module init
         self.logger = logging.getLogger("TcpClient")
         self.logger.setLevel(logging.INFO)
-        hd        = logging.StreamHandler()
+        hd = logging.StreamHandler()
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         hd.setFormatter(formatter)
         self.logger.addHandler(hd)
@@ -108,38 +108,6 @@ class TcpClient(object):
             self.buf.append(0)
         # self.initial_packet.begin_time = time.time()
         # self.send_time = time.time()
-
-
-    #----------retransmit the file --------------------------
-    def retransmit_pkt(self):
-        self.logger.debug("retransmit!!!")
-        print ("oldest_unacked_pkt: %s" % self.base)
-        if self.base != 0:
-            # initial_seq =  self.initial_packet.ack_num - self.window_size * MSS
-            print("initial", self.base)
-            # for i in range(self.window_size):
-            #     self.retransmit_counter()
-            #     seq_num = self.base + i * MSS
-            #     self.logger.debug("retransmit_seq_num: %s" % seq_num)
-            #     ack_num = seq_num + self.window_size * MSS
-            #     self.logger.debug("retransmit_ack_num: %s" % ack_num)
-            #     if i == 0:
-            #         self.initial_packet.ack_num = ack_num
-            #         self.initial_packet.begin_time = time.time()
-            #     data_bytes = self.read_bytes_from_file(seq_num)
-            #     fin_flag = len(data_bytes) == 0
-            #     self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
-            self.retransmit_counter()
-            seq_num = self.ack_num_from
-            ack_num = self.seq_num_from + MSS
-            self.logger.debug("retransmit_seq_num: %s" % seq_num)
-            data_bytes = self.read_bytes_from_file(seq_num)
-            fin_flag = len(data_bytes) == 0
-            self.send_pkt(seq_num, ack_num, fin_flag, data_bytes)
-        else :
-            print("retransmit the start file info")
-            self.send_init_packet()# restart timer
-        # self.restart_timer()
 
     # -----------------handle on retransmiting the pkts --------------
     def retransmit_pkts(self):
@@ -298,7 +266,8 @@ class TcpClient(object):
         while not self.recv_fin_flag:
             while self.status:
                 # ------send pkts in the sliding window range--------------------------
-                while self.seq_num + MSS <= self.base + self.window_size and not self.recv_fin_flag:
+                while (self.seq_num + MSS) % self.MAX_RANGE <= (self.base + self.window_size) % self.MAX_RANGE \
+                        and not self.recv_fin_flag:
 
                     # -------1. generate header: calculate seq, ack, and fin_flag ------
 
@@ -329,7 +298,7 @@ class TcpClient(object):
                             self.restart_timer()
 
                     # --------5. update seq_num-------------------------------------------
-                    self.seq_num += MSS
+                    self.seq_num = (self.seq_num + MSS) % self.MAX_RANGE;
 
 
     # *thread: method to send packet
