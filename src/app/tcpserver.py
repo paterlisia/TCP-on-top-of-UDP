@@ -13,7 +13,7 @@ from error.error import recv_arg_parser
 
 # make packets utils
 from helper.helper import ProcessPacket
-from packets.packet import MSS, HEADER_LENGTH
+from packets.packet import MSS, head_len
 from packets.packet import PacketGenerator, PacketExtractor
 from helper.helper import ProcessPacket
 
@@ -92,7 +92,7 @@ class TcpServer(object):
         while self.status:
             try:
                 # -------------- receive pkt from tcpclient---------------------
-                recvd_pkt, recvd_addr = self.recv_sock.recvfrom(MSS + HEADER_LENGTH)
+                recvd_pkt, recvd_addr = self.recv_sock.recvfrom(MSS + head_len)
                 # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
@@ -166,14 +166,14 @@ class TcpServer(object):
 
                                 self.ack_num_to = self.seq_num_from + MSS
                                 self.seq_num_to = self.ack_num_from
-                                self.expected_seq = ack_num
+                                self.expected_seq += MSS
 
                             # ---------3.4 update expected seq number if arriving seg fills in gap---------
 
                                 while self.expected_seq in self.buf:
                              # -----3.4.1 write data into file---------------------------------------
                                     self.write_file_buffer(self.expected_seq, self.buf[self.expected_seq])
-
+                                    print("write data from buf: ", self.expected_seq)
                              # -----3.4.2 remove written data seq in buf-----------------------------
                                     del self.buf[self.expected_seq]
                                     self.expected_seq += MSS

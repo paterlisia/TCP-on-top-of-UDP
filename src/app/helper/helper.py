@@ -2,7 +2,7 @@ from packets.packet import PacketExtractor
 
 
 class ProcessPacket(object):
-    def __init__(self, recv_port, send_port) -> None:
+    def __init__(self, recv_port, send_port):
         self.pkt_ext = PacketExtractor(recv_port, send_port)
 
     # return info client and server needed : header and data

@@ -44,12 +44,13 @@ newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
         newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
     ```
     - start tcpserver
+    **Note that if your python alias is exactly python3+, then python would be fine as well**
     ```bash
-        python src/app/tcpserver.py src/app/data/receivefile.txt 8082 192.168.1.210 8080 src/app/data/recv_log.txt 
+        python3 src/app/tcpserver.py src/app/data/receivefile.txt 8082 192.168.1.210 8080 src/app/data/recv_log.txt 
     ```
     - start tcpclient
     ```bash
-        python src/app/tcpclient.py src/app/data/sendfile.txt  192.168.1.210 41192 8080 src/app/data/send_log.txt 1152
+        python3 src/app/tcpclient.py src/app/data/sendfile.txt  192.168.1.210 41192 8080 src/app/data/send_log.txt 1152
     ```
 
 2. run the `start-client.sh` and `start-server.sh` file
