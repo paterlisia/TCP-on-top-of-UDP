@@ -6,7 +6,7 @@ import socket
 import sys
 
 # utils function
-from utils.utils import init_recv_socket, progress_bar
+from utils.utils import init_socket, progress_bar
 
 # handle error method
 from error.error import recv_arg_parser
@@ -26,7 +26,7 @@ class TcpServer(object):
                        send_ip=localhost, send_port=default_port,
                        filename="data/receivefile.txt",
                        log_name="data/recv_log.txt"):
-        self.recv_sock = init_recv_socket((recv_ip, recv_port))
+        self.recv_sock = init_socket((recv_ip, recv_port))
         self.connections = [self.recv_sock]
         self.recv_ip = recv_ip
         self.recv_port = recv_port
@@ -98,11 +98,8 @@ class TcpServer(object):
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("header params", header_params)
                 print("recv packet with seq %s with ack %s"%(self.seq_num_from, self.ack_num_from))
-                log =   str(datetime.datetime.now()) + " " +       \
-                        str(self.send_addr[1]) + " " +             \
-                        str(self.recv_port) + " " +                \
-                        str(self.seq_num_from) + " " +             \
-                        str(self.ack_num_from)
+                log =   str(datetime.datetime.now()) + " " + str(self.send_addr[1]) + " " +             \
+                        str(self.recv_port) + " " +  str(self.seq_num_from) + " " +  str(self.ack_num_from)
                 if not self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
                     print("checksum not right, dismiss packet")
                     # ack the previous packet
