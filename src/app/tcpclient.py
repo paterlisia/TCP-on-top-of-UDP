@@ -85,6 +85,11 @@ class TcpClient(object):
 
     #----------read file--------------------------
     def read_bytes_from_file(self, start_bytes):
+        """
+        Used for reading bytes from file
+        :param start_bytes: int
+        :return data: byte
+        """
         if not self.recv_fin_flag:
             self.logger.debug("read file from %s byte" % start_bytes)
             self.sent_file.seek(start_bytes)
@@ -95,6 +100,11 @@ class TcpClient(object):
 
     # ----------send packet of file---------------
     def send_pkt(self, *pkt_params):
+        """
+        Used for sending data to tcpserver
+        :param pkt_params: list
+        :return none:
+        """
         self.segment_counter()
         packet = self.pkt_gen.generate_packet(*pkt_params)
         self.logger.debug("checksum: %s" % checksum_calculator(self.send_addr[1], self.recv_addr[1],*pkt_params))
@@ -107,6 +117,11 @@ class TcpClient(object):
 
     # -------this method is to send file info for the progress bar function in the very begining -----------
     def send_init_packet(self):
+        """
+        Used for sending init data
+        :param none
+        :return none:
+        """
         packet = self.pkt_gen.generate_packet(0, 0, 0, ("start file tranfer:%s:%s" %(self.window_size, self.file_size)).encode())
         print("send pkts, ", packet)
         self.tcp_client_sock.sendto(packet, self.recv_addr)
@@ -117,6 +132,11 @@ class TcpClient(object):
 
     # -----------------handle on retransmiting the pkts --------------
     def retransmit_pkts(self):
+        """
+        Used for retransmitting packet to tcpserver
+        :param none
+        :return none:
+        """
 
         # ------------ 1. get the smallest seq # (also the ack recv from server) that is not acked to be transmitted----
 
@@ -150,6 +170,11 @@ class TcpClient(object):
 
     # *thread: handle timeout situation: retransmission
     def timer(self):
+        """
+        Used for judging if timeout
+        :param none
+        :return none:
+        """
         print("start timer thread")
         while not self.recv_fin_flag:
             if self.handle_timeout():
@@ -164,6 +189,11 @@ class TcpClient(object):
 
     # function to compute estimate rtt
     def rtt_estimation(self):
+        """
+        Used for calculating time out interval
+        :param none
+        :return none:
+        """
         sample_rtt = time.time() - self.sample_rtt_pkt[1]
         print("sample rtt:", sample_rtt)
         self.estimated_rtt = self.estimated_rtt * 0.875 + sample_rtt * 0.125
@@ -172,22 +202,42 @@ class TcpClient(object):
 
     # function to judge time out
     def handle_timeout(self):
+        """
+        Used for judging time out
+        :param none
+        :return none:
+        """
         if not self.send_time:
             return False
         return time.time() - self.send_time >= self.time_out_interval
 
     # start timer
     def restart_timer(self):
+        """
+        Used for restarting the timer
+        :param none
+        :return none:
+        """
         self.send_time = time.time()
 
     # set a timer
     def set_timer(self, status):
+        """
+        Used for set if there is a timer on
+        :param none
+        :return none:
+        """
         self.is_timer = status
 
 
     #------------------TCP recv acks and send pkt threads------------
     # *thread: to recv acks from the server
     def tcp_recv_acks(self):
+        """
+        Used for receiving ack from tcpserver
+        :param none
+        :return none:
+        """
         print ("-------start TcpClient recv acks on %s with port %s ---"% self.send_addr)
         while not self.recv_fin_flag:
             #----------1. receive data from client--------------------------
@@ -278,6 +328,11 @@ class TcpClient(object):
 
     # *thread: to send pkts to tcpserver
     def tcp_send_pkts(self):
+        """
+        Used for sending packet to tcpserver
+        :param none
+        :return none:
+        """
         print ("-------start TcpClient send pkts on %s with port %s ---"% self.send_addr)
         self.start_tcp_client()
         while not self.recv_fin_flag:
@@ -321,22 +376,32 @@ class TcpClient(object):
 
     # -----------TCP start and close----------------
     def start_tcp_client(self):
-        # self.status = True
+        """
+        Used for starting tcp client
+        :param none
+        :return none:
+        """
         self.send_init_packet()
 
 
     # close tcp connection
     def close_tcp_client(self):
+        """
+        Used for closing tcp client
+        :param none
+        :return none:
+        """
         self.sent_file.close()
         self.log_file.close()
         self.status = False
 
-
-    def run(self):
-        self.tcp_send_pkt()
-
     # ----------transfer info conclusion part-----------
     def print_transfer_stats(self):
+        """
+        Used for print sending summary
+        :param none
+        :return none:
+        """
         print( "---------Transmission results-----------")
         print ("Total bytes sent:", self.file_size)
         print ("Segments sent =", self.segment_count)
@@ -344,10 +409,20 @@ class TcpClient(object):
 
     # count for retransmission
     def retransmit_counter(self):
+        """
+        Used for counting retransmission times
+        :param none
+        :return none:
+        """
         self.retrans_count += 1
 
     # count for segment sent
     def segment_counter(self):
+        """
+        Used for counting transmission times
+        :param none
+        :return none:
+        """
         self.segment_count += 1
 
 

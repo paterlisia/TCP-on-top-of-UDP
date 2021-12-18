@@ -60,29 +60,42 @@ class TcpServer(object):
 
 
     def send_close_request(self, seq_num, ack_num, fin_flag):
+        """
+        Used for sending close packet
+        :param seq_num, ack_num, fin_flag:
+        :return none:
+        """
         self.logger.info("Sending Close Request...")
         packet = self.pkt_gen.generate_packet(seq_num, ack_num, fin_flag)
         self.recv_sock.sendto(packet, self.send_addr)
 
 
     def write_file_buffer(self, start_bytes, data_bytes):
+        """
+        Used for write data into file
+        :param start_bytes, data_bytes
+        :return none:
+        """
         self.file_write.seek(start_bytes)
         self.file_write.write(data_bytes)
 
     # ---------- method to judge if the file has been complete written
     def is_write_file_completed(self):
+        """
+        Used for judging if file is completely received
+        :param none
+        :return none:
+        """
         return os.path.getsize(self.file_write.name) == self.file_size
-
-
-    # send ack for current packet
-    def tcp_send_ack(self):
-        fin_flag = 0
-        packet = self.pkt_gen.generate_packet (self.ack_num_from, self.seq_num_from, fin_flag)
-        self.recv_sock.sendto(packet, self.send_addr)
 
 
     # tcp server 
     def tcp_recv_pkt(self):
+        """
+        Used for server receive packet from tcpclient
+        :param none
+        :return none:
+        """
         self.start_tcp_server()
         print (("start tcp server on %s with port %s ...")% (self.recv_ip, self.recv_port))
         while self.status:
@@ -197,10 +210,20 @@ class TcpServer(object):
 
 # -----------TCP start and close----------------
     def start_tcp_server(self):
+        """
+        Used for starting tcp server
+        :param none
+        :return none:
+        """
         self.status = True
 
 
     def close_tcp_server(self):
+        """
+        Used for closing tcp server
+        :param none
+        :return none:
+        """
         self.file_write.close()
         self.log_file.close()
         self.status = False
