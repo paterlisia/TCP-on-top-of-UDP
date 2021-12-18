@@ -6,7 +6,7 @@ import socket
 import sys
 
 # utils function
-from utils.utils import init_recv_socket, progress_bar
+from utils.utils import init_socket, progress_bar
 
 # handle error method
 from error.error import recv_arg_parser
@@ -26,7 +26,7 @@ class TcpServer(object):
                        send_ip=localhost, send_port=default_port,
                        filename="data/receivefile.txt",
                        log_name="data/recv_log.txt"):
-        self.recv_sock = init_recv_socket((recv_ip, recv_port))
+        self.recv_sock = init_socket((recv_ip, recv_port))
         self.connections = [self.recv_sock]
         self.recv_ip = recv_ip
         self.recv_port = recv_port
@@ -66,12 +66,10 @@ class TcpServer(object):
 
 
     def write_file_buffer(self, start_bytes, data_bytes):
-        self.logger.debug("write file from %s byte" % start_bytes)
-        self.logger.debug("data_len: %s" % len(data_bytes))
         self.file_write.seek(start_bytes)
         self.file_write.write(data_bytes)
 
-
+    # ---------- method to judge if the file has been complete written
     def is_write_file_completed(self):
         return os.path.getsize(self.file_write.name) == self.file_size
 
@@ -79,9 +77,7 @@ class TcpServer(object):
     # send ack for current packet
     def tcp_send_ack(self):
         fin_flag = 0
-        packet = self.pkt_gen                      \
-                    .generate_packet              \
-                    (self.ack_num_from, self.seq_num_from, fin_flag)
+        packet = self.pkt_gen.generate_packet (self.ack_num_from, self.seq_num_from, fin_flag)
         self.recv_sock.sendto(packet, self.send_addr)
 
 
@@ -93,16 +89,12 @@ class TcpServer(object):
             try:
                 # -------------- receive pkt from tcpclient---------------------
                 recvd_pkt, recvd_addr = self.recv_sock.recvfrom(MSS + head_len)
-                # print("recv on port %s with packet %s"%(self.recv_port, recvd_pkt))
                 # extract params from packet
                 header_params, self.seq_num_from, self.ack_num_from, self.recv_fin_flag, recv_checksum = self.helper.extract_info(recvd_pkt)
                 print("header params", header_params)
                 print("recv packet with seq %s with ack %s"%(self.seq_num_from, self.ack_num_from))
-                log =   str(datetime.datetime.now()) + " " +       \
-                        str(self.send_addr[1]) + " " +             \
-                        str(self.recv_port) + " " +                \
-                        str(self.seq_num_from) + " " +             \
-                        str(self.ack_num_from)
+                log =   str(datetime.datetime.now()) + " " + str(self.send_addr[1]) + " " +             \
+                        str(self.recv_port) + " " +  str(self.seq_num_from) + " " +  str(self.ack_num_from)
                 if not self.pkt_ext.is_checksum_valid(recvd_pkt, recv_checksum):
                     print("checksum not right, dismiss packet")
                     # ack the previous packet

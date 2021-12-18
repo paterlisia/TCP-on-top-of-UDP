@@ -11,7 +11,7 @@ from threading import Thread
 from threading import Lock
 from threading import ThreadError
 # utils 
-from utils.utils import init_send_socket
+from utils.utils import init_socket
 
 # handle error
 from error.error import send_arg_parser
@@ -33,7 +33,7 @@ class TcpClient(object):
                        filename="data/sendfile.txt", log_name="send_log.txt", window_size=1):
         # socket related variables
         self.send_addr   = (send_ip, send_port)
-        self.tcp_client_sock = init_send_socket((send_ip, send_port))
+        self.tcp_client_sock = init_socket((send_ip, send_port))
         self.connections = [self.tcp_client_sock]
         self.recv_addr   = (recv_ip, recv_port)
         # file variables
@@ -63,6 +63,7 @@ class TcpClient(object):
         self.recv_fin_flag = False
         # helper object
         self.helper = ProcessPacket(recv_port, send_port)
+        # -------- init packet generator class with src_port and dest_port---------
         self.pkt_gen = PacketGenerator(send_port, recv_port)
         self.pkt_ext = PacketExtractor(send_port, recv_port)
         self.helper = ProcessPacket(recv_port, send_port)
@@ -96,7 +97,7 @@ class TcpClient(object):
     def send_pkt(self, *pkt_params):
         self.segment_counter()
         packet = self.pkt_gen.generate_packet(*pkt_params)
-        self.logger.debug("checksum: %s" % checksum_calculator(*pkt_params))
+        self.logger.debug("checksum: %s" % checksum_calculator(self.send_addr[1], self.recv_addr[1],*pkt_params))
         try:
             a = self.tcp_client_sock.sendto(packet, self.recv_addr)
         except OSError:
