@@ -95,7 +95,7 @@ newudpl -i192.168.1.210:8080 -o192.168.1.210:8082 -L 50 -O 10 -B10
         python3 src/app/tcpclient.py src/app/data/sendfile.txt  192.168.1.210 41192 8080 src/app/data/send_log.txt 1152
     ```
 
-2. run the `start-client.sh` and `start-server.sh` file, but please replace the `IP address` and `port` you want to run on before run the script.
+2. run the `start-client.sh` and `start-server.sh` file, but please replace the `IP address`(required) and `port`(optional) you want to run on before run the script.
     ```bash
     sh start-client.sh
     sh start-server.sh
